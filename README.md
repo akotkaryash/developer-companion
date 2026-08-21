@@ -13,6 +13,8 @@ This project demonstrates enterprise-grade distributed systems, polyglot microse
 *   **Data Pipeline:** Kafka (Event Mesh), Apache Airflow, Apache Spark, Debezium (CDC).
 *   **Applied AI:** Python (FastAPI) microservice utilizing `pgvector` for RAG and predictive knowledge-decay modeling.
 *   **Infrastructure:** PostgreSQL (Citus/Sharding), Redis Cluster, Docker Compose.
+*   **Data Collection:** Custom Browser Extension (TypeScript) for platform-agnostic DOM/Network scraping.
+
 
 ## 📂 Repository Structure
 

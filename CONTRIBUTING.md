@@ -12,29 +12,37 @@ Select the track that matches your focus to run an isolated local environment:
 * **Prerequisites:** Node.js 20+, npm
 * **Workflow:** Work inside `/apps` or `/libs` using mock backends without running Java or Docker.
 * **Run:**
-  \`\`\`bash
+  ```bash
   npx nx serve web-shell --mock-backend
-  \`\`\`
+  ```
 
 ### Track 2: Backend & Microservices (Spring Boot / Python AI)
 * **Prerequisites:** Java 21+, Python 3.11+, Docker Desktop
 * **Workflow:** Spin up only core backing infrastructure and run your targeted microservice locally.
 * **Run:**
-  \`\`\`bash
+  ```bash
   # Boot minimal core dependencies
   docker-compose --profile minimal up -d
 
   # Run the core service via Maven
   ./mvnw spring-boot:run -pl services/core-gamification
-  \`\`\`
+  ```
 
 ### Track 3: Data Engineering & Analytics (Kafka, Spark, Airflow)
 * **Prerequisites:** Docker Desktop, Python 3.11+
 * **Workflow:** Work in `/data-pipelines` using synthetic event generators without spinning up the frontend.
 * **Run:**
-  \`\`\`bash
+  ```bash
   docker-compose --profile data-eng up -d
-  \`\`\`
+  ```
+
+### Track 4: Browser Extension (TypeScript)
+* **Prerequisites:** Node.js 20+, Chrome/Edge Browser
+* **Workflow:** Develop the DOM/Network scraping logic in isolation.
+* **Run:**
+  ```bash
+  npx nx build extension-scraper
+  ```
 
 ---
 
