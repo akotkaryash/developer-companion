@@ -1,0 +1,31 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: core-gamification
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/developer_companion
+    username: postgres
+    password: postgres_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: core-gamification-group
+      auto-offset-reset: earliest
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
