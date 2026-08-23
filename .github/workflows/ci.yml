@@ -1,0 +1,29 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  validate-workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Validate FastAPI Requirements Syntax
+        run: |
+          cd services/ai-agent-service
+          python -m py_compile src/main.py
+
+      - name: Verify Docker Compose Configuration
+        uses: docker/compose-github-action@v2
+        with:
+          arg: --file infrastructure/docker/docker-compose.yml config
