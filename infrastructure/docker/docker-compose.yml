@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: dc_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: developer_companion
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    profiles:
+      - infrastructure
+      - backend
+
+  ai-agent:
+    build: ../../services/ai-agent-service
+    container_name: dc_ai_agent
+    ports:
+      - "8000:8000"
+    profiles:
+      - ai
+      - fullstack
+
+volumes:
+  postgres_data:
