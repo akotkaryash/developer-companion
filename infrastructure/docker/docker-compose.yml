@@ -1,10 +1,13 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    # pgvector/pgvector:pg15 = stock Postgres 15 + the pgvector extension
+    # pre-installed. Needed for the AI agent's embedding search (DEV-204) -
+    # plain postgres:15-alpine can't run `CREATE EXTENSION vector`.
+    image: pgvector/pgvector:pg15
     container_name: dc_postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: postgres_password
       POSTGRES_DB: developer_companion
     ports:
       - "5432:5432"

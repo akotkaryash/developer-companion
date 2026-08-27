@@ -13,7 +13,11 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway (see db/migration) owns the schema. `validate` just checks
+      # entities match what Flyway already created - `update` would let
+      # Hibernate silently auto-alter tables too, which fights Flyway the
+      # moment JPA entities exist.
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:

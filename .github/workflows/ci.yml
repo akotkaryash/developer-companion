@@ -25,3 +25,33 @@ jobs:
 
       - name: Verify Docker Compose Configuration
         run: docker compose --file infrastructure/docker/docker-compose.yml config
+
+  validate-db-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_DB: developer_companion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Apply Flyway migrations in order
+        env:
+          PGPASSWORD: postgres_password
+        run: |
+          for f in services/core-gamification/src/main/resources/db/migration/V*.sql; do
+            echo "Applying $f"
+            psql -h localhost -U postgres -d developer_companion -v ON_ERROR_STOP=1 -f "$f"
+          done
