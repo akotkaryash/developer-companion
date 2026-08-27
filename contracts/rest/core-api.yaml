@@ -1,0 +1,388 @@
+openapi: 3.0.3
+info:
+  title: Developer Companion - Core API
+  description: >
+    Public-facing REST contract between the Browser Extension / Angular Web Shell
+    and the Spring Cloud Gateway. This is the source of truth for request/response
+    shapes — see DEV-301 (Epic 3) for how typed clients get generated from it.
+    Internal service-to-service (M2M) contracts are defined separately under
+    DEV-202, not here.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+    description: Via Spring Cloud Gateway (local or production — Gateway owns the host)
+
+tags:
+  - name: Submissions
+    description: Ingestion of coding-platform submissions from the Browser Extension
+  - name: Users
+    description: Authenticated user stats and public profiles
+  - name: Leaderboards
+    description: Public, Redis-cached rankings
+  - name: AI
+    description: DSA Coach hints and knowledge-decay recommendations (proxied to ai-agent-service)
+  - name: Portfolio
+    description: AI-generated resume/portfolio content
+  - name: Admin
+    description: Moderator/admin-only operations. System health is NOT part of this
+      contract — that's covered by Spring Boot Actuator, not a bespoke endpoint.
+
+paths:
+  /submissions:
+    post:
+      tags: [Submissions]
+      summary: Ingest a solved-problem submission from the Browser Extension
+      description: >
+        Idempotent: uniqueness is (userId, platform, submissionId). Replaying an
+        already-processed submission returns 200 with the original result instead
+        of granting XP twice — see docs/architecture/03-core-gamification-engine.md.
+      security: [{ bearerAuth: [ROLE_USER] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionRequest'
+      responses:
+        '201':
+          description: Submission processed, XP/streak newly awarded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+        '200':
+          description: Submission already processed previously (idempotent replay)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/stats:
+    get:
+      tags: [Users]
+      summary: Get the authenticated user's private dashboard stats
+      security: [{ bearerAuth: [ROLE_USER] }]
+      responses:
+        '200':
+          description: Current user stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/{username}/profile:
+    get:
+      tags: [Users]
+      summary: Get a public developer profile
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Username'
+      responses:
+        '200':
+          description: Public profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /leaderboards:
+    get:
+      tags: [Leaderboards]
+      summary: Get the global leaderboard for a timeframe
+      description: Served from Redis, populated by the Spark/Airflow pipeline — see
+        docs/architecture/05-data-engineering-pipeline.md.
+      security: []
+      parameters:
+        - name: timeframe
+          in: query
+          schema:
+            type: string
+            enum: [DAILY, WEEKLY, ALL_TIME]
+            default: ALL_TIME
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Paginated leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardPage'
+
+  /ai/coach/hints:
+    post:
+      tags: [AI]
+      summary: Request a non-spoiler algorithmic hint for a submission
+      security: [{ bearerAuth: [ROLE_USER] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HintRequest'
+      responses:
+        '200':
+          description: Hint generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HintResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ai/recommendations:
+    get:
+      tags: [AI]
+      summary: Get knowledge-decay-based practice recommendations for the current user
+      security: [{ bearerAuth: [ROLE_USER] }]
+      responses:
+        '200':
+          description: Recommended problems
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /portfolio/generate:
+    post:
+      tags: [Portfolio]
+      summary: Generate resume/portfolio bullet points from the user's metrics
+      security: [{ bearerAuth: [ROLE_USER] }]
+      responses:
+        '200':
+          description: Generated portfolio content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/users/{userId}/ban:
+    post:
+      tags: [Admin]
+      summary: Ban a malicious user
+      security: [{ bearerAuth: [ROLE_ADMIN] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: User banned
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/submissions/{submissionId}/flag:
+    patch:
+      tags: [Admin]
+      summary: Flag a submission as suspicious for review
+      security: [{ bearerAuth: [ROLE_ADMIN] }]
+      parameters:
+        - name: submissionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Submission flagged
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT issued by Keycloak. Role (ROLE_USER/ROLE_ADMIN) enforced by
+        Spring Security at the Gateway/service layer — OpenAPI security
+        requirements below are documentation, not enforcement.
+
+  parameters:
+    Username:
+      name: username
+      in: path
+      required: true
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but lacking the required role
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      description: RFC 7807 Problem Details, matching Spring Boot 3's built-in
+        ProblemDetail support.
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+
+    Platform:
+      type: string
+      enum: [LEETCODE, GFG]
+
+    Difficulty:
+      type: string
+      enum: [EASY, MEDIUM, HARD]
+
+    SubmissionRequest:
+      type: object
+      required: [platform, problemId, difficulty, language, status, submissionId, timestamp]
+      properties:
+        platform: { $ref: '#/components/schemas/Platform' }
+        problemId: { type: string, example: two-sum }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        language: { type: string, example: PYTHON3 }
+        codeSnapshot: { type: string }
+        status:
+          type: string
+          enum: [ACCEPTED]
+        submissionId:
+          type: string
+          description: Unique ID from the source platform, used for idempotency.
+        timestamp: { type: string, format: date-time }
+
+    SubmissionResult:
+      type: object
+      properties:
+        xpAwarded: { type: integer }
+        totalXp: { type: integer }
+        level: { type: integer }
+        currentStreak: { type: integer }
+        leveledUp: { type: boolean }
+        badgesUnlocked:
+          type: array
+          items: { $ref: '#/components/schemas/Badge' }
+
+    Badge:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        unlockedAt: { type: string, format: date-time }
+
+    UserStats:
+      type: object
+      properties:
+        username: { type: string }
+        totalXp: { type: integer }
+        level: { type: integer }
+        xpForNextLevel: { type: integer }
+        currentStreak: { type: integer }
+        longestStreak: { type: integer }
+        badges:
+          type: array
+          items: { $ref: '#/components/schemas/Badge' }
+
+    PublicProfile:
+      type: object
+      properties:
+        username: { type: string }
+        level: { type: integer }
+        totalXp: { type: integer }
+        currentStreak: { type: integer }
+        joinedAt: { type: string, format: date-time }
+        badges:
+          type: array
+          items: { $ref: '#/components/schemas/Badge' }
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank: { type: integer }
+        username: { type: string }
+        totalXp: { type: integer }
+        level: { type: integer }
+
+    LeaderboardPage:
+      type: object
+      properties:
+        timeframe: { type: string, enum: [DAILY, WEEKLY, ALL_TIME] }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/LeaderboardEntry' }
+
+    HintRequest:
+      type: object
+      required: [problemId, codeSnapshot]
+      properties:
+        problemId: { type: string }
+        codeSnapshot: { type: string }
+
+    HintResponse:
+      type: object
+      properties:
+        hint: { type: string }
+        complexityDetected: { type: string, example: "O(N^2) brute force" }
+
+    Recommendation:
+      type: object
+      properties:
+        problemId: { type: string }
+        topic: { type: string, example: Graphs }
+        reason: { type: string, example: "Not solved a Graph problem in 14 days" }
+        similarityScore: { type: number, format: float }
+
+    PortfolioContent:
+      type: object
+      properties:
+        bulletPoints:
+          type: array
+          items: { type: string }
+        generatedAt: { type: string, format: date-time }
